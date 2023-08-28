@@ -1,0 +1,182 @@
+package pgdb
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/ABDURAZZAKK/avito_experiment/internal/entity"
+	"github.com/ABDURAZZAKK/avito_experiment/internal/repo/repoerrs"
+	"github.com/ABDURAZZAKK/avito_experiment/pkg/postgres"
+	"github.com/Masterminds/squirrel"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+)
+
+type UsersSegmentsRepo struct {
+	*postgres.Postgres
+}
+
+func NewUsersSegmentsRepo(pg *postgres.Postgres) *UsersSegmentsRepo {
+	return &UsersSegmentsRepo{pg}
+}
+
+func (r *UsersSegmentsRepo) GetTransaction(ctx context.Context) (pgx.Tx, error) {
+	tx, err := r.Pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("UsersSegmentsRepo.AddAndRemoveSegmentsUser - r.Pool.Begin: %v", err)
+	}
+
+	return tx, nil
+}
+
+func (r *UsersSegmentsRepo) getInsertSqlAddSegmentsToUser(user_pk int, list []string, operation entity.Operation) (string, []interface{}, error) {
+	builder := r.Builder.
+		Insert("users_segments_stats").
+		Columns("user_pk", "segment_pk", "created_at", "operation")
+	for _, segment := range list {
+		builder = builder.
+			Values(user_pk, segment, time.Now(), operation)
+	}
+	return builder.ToSql()
+}
+
+func (r *UsersSegmentsRepo) AddAndRemoveSegmentsUser(
+	ctx context.Context,
+	user_pk int,
+	addList []string,
+	removeList []string) error {
+	tx, err := r.Pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("UsersSegmentsRepo.AddAndRemoveSegmentsUser - r.Pool.Begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if len(addList) != 0 {
+		sql, args, _ := r.getInsertSqlAddSegmentsToUser(user_pk, addList, entity.SEGMENT_ADDED)
+		if _, err = tx.Exec(ctx, sql, args...); err != nil {
+			return fmt.Errorf("UsersSegmentsRepo.AddAndRemoveSegmentsUser (add to stats) - tx.Exec: %v", err)
+		}
+		builder := r.Builder.
+			Insert("users_segments").
+			Columns("user_pk", "segment_pk")
+		for _, segment := range addList {
+			builder = builder.
+				Values(user_pk, segment)
+		}
+		sql, args, _ = builder.ToSql()
+		if _, err = tx.Exec(ctx, sql, args...); err != nil {
+			var pgErr *pgconn.PgError
+			if ok := errors.As(err, &pgErr); ok {
+				if pgErr.Code == "23505" {
+					return repoerrs.ErrAlreadyExists
+				}
+				if pgErr.Code == "23503" {
+					return repoerrs.ErrNotFound
+				}
+			}
+			return fmt.Errorf("UsersSegmentsRepo.AddAndRemoveSegmentsUser (add) - tx.Exec: %v", err)
+		}
+
+	}
+	if len(removeList) != 0 {
+		sql, args, _ := r.getInsertSqlAddSegmentsToUser(user_pk, removeList, entity.SEGMENT_REMOVED)
+		if _, err = tx.Exec(ctx, sql, args...); err != nil {
+			return fmt.Errorf("UsersSegmentsRepo.AddAndRemoveSegmentsUser (remove to stats) - tx.Exec: %v", err)
+		}
+
+		some := squirrel.Or{}
+		for _, slug := range removeList {
+			some = append(some, squirrel.Eq{"user_pk": user_pk, "segment_pk": slug})
+		}
+		sql, args, _ = r.Builder.
+			Delete("users_segments").
+			Where(some).
+			ToSql()
+
+		if _, err = tx.Exec(ctx, sql, args...); err != nil {
+			return fmt.Errorf("UsersSegmentsRepo.AddAndRemoveSegmentsUser (remove) - tx.Exec: %v", err)
+		}
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("UsersSegmentsRepo.AddAndRemoveSegmentsUser - tx.Commit: %v", err)
+	}
+
+	return nil
+}
+
+func (r *UsersSegmentsRepo) GetUserSegments(ctx context.Context, id int) ([]string, error) {
+	sql, args, _ := r.Builder.
+		Select("segment_pk").
+		From("users_segments").
+		Where("user_pk = ?", id).
+		ToSql()
+
+	rows, err := r.Pool.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("UsersSegmentsRepo.GetUserSegments - r.Pool.Query: %v", err)
+	}
+	defer rows.Close()
+	var segments []string
+	for rows.Next() {
+		var s string
+		err := rows.Scan(&s)
+		if err != nil {
+			return nil, fmt.Errorf("UsersSegmentsRepo.GetUserSegments - rows.Scan: %v", err)
+		}
+		segments = append(segments, s)
+	}
+
+	if err = rows.Err(); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, repoerrs.ErrNotFound
+		}
+		return nil, fmt.Errorf("UsersSegmentsRepo.GetUserSegments -rows.Err: %v", err)
+	}
+
+	return segments, nil
+}
+
+func (r *UsersSegmentsRepo) GetStatsPerPeriod(ctx context.Context, year int, month int) ([]entity.UsersSegmentsStats, error) {
+	_month := time.Month(month)
+	month_start := time.Date(2023, _month, 1, 0, 0, 0, 0, time.Local).Format("2006-01-02")
+	month_end := time.Date(2023, _month+1, 1, 0, 0, 0, 0, time.Local).Format("2006-01-02")
+	sql, args, _ := r.Builder.
+		Select("*").
+		From("users_segments_stats").
+		Where("created_at >= ? AND created_at < ?", month_start, month_end).
+		ToSql()
+
+	rows, err := r.Pool.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("UsersSegmentsRepo.GetUserSegments - r.Pool.Query: %v", err)
+	}
+	defer rows.Close()
+
+	var segments []entity.UsersSegmentsStats
+	for rows.Next() {
+		var s entity.UsersSegmentsStats
+		err := rows.Scan(
+			&s.User,
+			&s.Segment,
+			&s.Created_at,
+			&s.Operation,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("UsersSegmentsRepo.GetUserSegments - rows.Scan: %v", err)
+		}
+		segments = append(segments, s)
+	}
+
+	if err = rows.Err(); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, repoerrs.ErrNotFound
+		}
+		return nil, fmt.Errorf("UsersSegmentsRepo.GetUserSegments -rows.Err: %v", err)
+	}
+
+	return segments, nil
+
+}
