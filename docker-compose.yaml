@@ -42,7 +42,7 @@ services:
       - .env
     ports:
       - "${HTTP_PORT}:${HTTP_PORT}"
-    restart: on-failure
+    restart: always
     command: /app
     depends_on:
       postgres:
@@ -59,7 +59,7 @@ services:
       - .env
     volumes:
       - ./assets:/assets
-    restart: on-failure
+    restart: always
     command: /consumer
     depends_on:
       postgres:
