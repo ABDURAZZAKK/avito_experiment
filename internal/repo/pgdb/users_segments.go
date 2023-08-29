@@ -41,6 +41,12 @@ func (r *UsersSegmentsRepo) getInsertSqlAddSegmentsToUser(user_pk int, list []st
 	}
 	return builder.ToSql()
 }
+func getMonthStartEndDates(month int) (start string, end string) {
+	_month := time.Month(month)
+	start = time.Date(2023, _month, 1, 0, 0, 0, 0, time.Local).Format("2006-01-02")
+	end = time.Date(2023, _month+1, 1, 0, 0, 0, 0, time.Local).Format("2006-01-02")
+	return start, end
+}
 
 func (r *UsersSegmentsRepo) AddAndRemoveSegmentsUser(
 	ctx context.Context,
@@ -140,9 +146,7 @@ func (r *UsersSegmentsRepo) GetUserSegments(ctx context.Context, id int) ([]stri
 }
 
 func (r *UsersSegmentsRepo) GetStatsPerPeriod(ctx context.Context, year int, month int) ([]entity.UsersSegmentsStats, error) {
-	_month := time.Month(month)
-	month_start := time.Date(2023, _month, 1, 0, 0, 0, 0, time.Local).Format("2006-01-02")
-	month_end := time.Date(2023, _month+1, 1, 0, 0, 0, 0, time.Local).Format("2006-01-02")
+	month_start, month_end := getMonthStartEndDates(month)
 	sql, args, _ := r.Builder.
 		Select("*").
 		From("users_segments_stats").
