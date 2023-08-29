@@ -5,6 +5,8 @@ import (
 	"encoding/csv"
 	"os"
 	"strconv"
+	"time"
+	_ "time/tzdata"
 
 	"github.com/ABDURAZZAKK/avito_experiment/config"
 	"github.com/ABDURAZZAKK/avito_experiment/internal/repo/pgdb"
@@ -20,16 +22,15 @@ func createCSVFromUsersSegments(pg *postgres.Postgres, msg map[string]interface{
 		int(msg["month"].(float64)),
 	)
 	if err != nil {
-		log.Fatalf("Consumer usersSegmentsRepo.GetStatsPerPeriod: %v", err)
+		log.Fatalf("consumer createCSVFromUsersSegments - usersSegmentsRepo.GetStatsPerPeriod: %v", err)
 	}
 
 	columns := []string{"Пользователь", "Сегмент", "Операция", "Дата и время"}
 	f, err := os.Create(msg["filename"].(string))
-	defer f.Close()
-
 	if err != nil {
-		log.Fatalln("failed to open file", err)
+		log.Fatalf("consumer createCSVFromUsersSegments - os.Create: %v", err)
 	}
+	defer f.Close()
 
 	w := csv.NewWriter(f)
 	defer w.Flush()
@@ -41,6 +42,42 @@ func createCSVFromUsersSegments(pg *postgres.Postgres, msg map[string]interface{
 		}
 	}
 	log.Printf("Succses Create File: %s", msg["filename"].(string))
+}
+
+func callAt(callTime string, f func()) {
+	loc, err := time.LoadLocation("Europe/Moscow")
+	if err != nil {
+		log.Fatal(err)
+	}
+	ctime, err := time.ParseInLocation("2006-01-02 15:04:05", callTime, loc)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if time.Now().In(loc).Before(ctime) {
+		duration := ctime.Sub(time.Now().In(loc))
+		log.Printf("Segment delete from User after %v", duration)
+		time.Sleep(duration)
+		f()
+	}
+}
+
+func DeleteSegmentFromUserOnTime(pg *postgres.Postgres, msg map[string]interface{}) {
+	usersSegmentsRepo := pgdb.NewUsersSegmentsRepo(pg)
+	m := msg["segments"].([]interface{})
+	segments := make([]string, 0, len(m))
+	for _, v := range m {
+		segments = append(segments, v.(string))
+	}
+	err := usersSegmentsRepo.DeleteSegmentFromUser(context.Background(),
+		int(msg["user"].(float64)),
+		segments,
+	)
+	if err != nil {
+		log.Fatalf("consumer DeleteSegmentFromUserOnTime - usersSegmentsRepo.DeleteSegmentFromUser: %v", err)
+	} else {
+		log.Printf("Succses delete Segment from User at time: %s", msg["time"].(string))
+	}
+
 }
 
 func main() {
@@ -83,7 +120,9 @@ func main() {
 			}
 			switch msg["task"] {
 			case "createCSVFromUsersSegments":
-				createCSVFromUsersSegments(pg, msg)
+				go createCSVFromUsersSegments(pg, msg)
+			case "DeleteSegmentFromUserOnTime":
+				go callAt(msg["time"].(string), func() { DeleteSegmentFromUserOnTime(pg, msg) })
 			}
 		}
 	}()

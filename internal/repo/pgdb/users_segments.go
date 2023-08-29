@@ -184,3 +184,35 @@ func (r *UsersSegmentsRepo) GetStatsPerPeriod(ctx context.Context, year int, mon
 	return segments, nil
 
 }
+func (r *UsersSegmentsRepo) DeleteSegmentFromUser(ctx context.Context, user_pk int, segments []string) error {
+	tx, err := r.Pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("UsersSegmentsRepo.DeleteSegmentFromUser - r.Pool.Begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if len(segments) != 0 {
+		sql, args, _ := r.getInsertSqlAddSegmentsToUser(user_pk, segments, entity.SEGMENT_REMOVED)
+		if _, err = tx.Exec(ctx, sql, args...); err != nil {
+			return fmt.Errorf("UsersSegmentsRepo.DeleteSegmentFromUser (remove to stats) - tx.Exec: %v", err)
+		}
+
+		some := squirrel.Or{}
+		for _, slug := range segments {
+			some = append(some, squirrel.Eq{"user_pk": user_pk, "segment_pk": slug})
+		}
+		sql, args, _ = r.Builder.
+			Delete("users_segments").
+			Where(some).
+			ToSql()
+
+		if _, err = tx.Exec(ctx, sql, args...); err != nil {
+			return fmt.Errorf("UsersSegmentsRepo.DeleteSegmentFromUser (remove) - tx.Exec: %v", err)
+		}
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("UsersSegmentsRepo.DeleteSegmentFromUser - tx.Commit: %v", err)
+	}
+
+	return nil
+}

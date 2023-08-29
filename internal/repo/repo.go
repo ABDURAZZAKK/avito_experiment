@@ -25,6 +25,7 @@ type UsersSegments interface {
 	AddAndRemoveSegmentsUser(ctx context.Context, user int, addList []string, removeList []string) error
 	GetUserSegments(ctx context.Context, id int) ([]string, error)
 	GetStatsPerPeriod(ctx context.Context, year int, month int) ([]entity.UsersSegmentsStats, error)
+	DeleteSegmentFromUser(ctx context.Context, user_pk int, segments []string) error
 }
 
 type Repositories struct {

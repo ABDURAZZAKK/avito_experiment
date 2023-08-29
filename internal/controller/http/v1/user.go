@@ -134,6 +134,7 @@ type changeUserSegmentsInput struct {
 	Id         int      `json:"id"`
 	AddList    []string `json:"add_list"`
 	RemoveList []string `json:"remove_list"`
+	DeleteAt   *string  `json:"delete_at,omitempty"`
 }
 
 func (r *userRoutes) addSegments(c echo.Context) error {
@@ -160,6 +161,24 @@ func (r *userRoutes) addSegments(c echo.Context) error {
 		}
 		newErrorResponse(c, http.StatusInternalServerError, "internal server error")
 		return err
+	}
+	if input.DeleteAt != nil && *input.DeleteAt != "" {
+		msg, err := broker.MsgSerialize(broker.Message{
+			"task":     "DeleteSegmentFromUserOnTime",
+			"time":     input.DeleteAt,
+			"user":     input.Id,
+			"segments": input.AddList,
+		})
+		if err != nil {
+			newErrorResponse(c, http.StatusInternalServerError, "internal server error")
+			return err
+		}
+
+		err = r.Rabbit.Publish(msg)
+		if err != nil {
+			newErrorResponse(c, http.StatusInternalServerError, "internal server error")
+			return err
+		}
 	}
 
 	type response struct {
