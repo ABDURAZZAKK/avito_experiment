@@ -50,7 +50,7 @@ func (s *UserService) ChangeSegments(ctx context.Context, user_pk int, addList [
 		return fmt.Errorf("UserService.ChangeSegments - userRepo.GetById: %v", err)
 	}
 
-	err = s.usersSegmentsRepo.AddAndRemoveSegmentsUser(ctx, user_pk, addList, removeList)
+	err = s.usersSegmentsRepo.AddAndRemoveSegmentsUser(ctx, []int{user_pk}, addList, removeList)
 	if err != nil {
 		if err == repoerrs.ErrAlreadyExists {
 			return ErrAlreadyExists
@@ -87,4 +87,32 @@ func (s *UserService) Delete(ctx context.Context, id int) (int, error) {
 		return 0, fmt.Errorf("UserService.Delete - userRepo.Delete: %v", err)
 	}
 	return u_id, nil
+}
+
+func (s *UserService) GetRandomIDs(ctx context.Context, limit int) ([]int, error) {
+	return s.userRepo.GetRandomIDs(ctx, limit)
+
+}
+func (s *UserService) GetCount(ctx context.Context) (int, error) {
+	return s.userRepo.GetCount(ctx)
+}
+
+func (s *UserService) GetRandomIDsWithPercent(ctx context.Context, percent int) ([]int, error) {
+	if percent > 0 {
+		count, err := s.userRepo.GetCount(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("UserService.GetRandomIDsWithPercent - userRepo.GetCount: %v", err)
+		}
+
+		limit := int(float32(count) * (float32(percent) / 100))
+		if limit < 1 {
+			limit++
+		}
+		users, err := s.userRepo.GetRandomIDs(ctx, limit)
+		if err != nil {
+			return nil, fmt.Errorf("UserService.GetRandomIDsWithPercent - userRepo.GetRandomIDs: %v", err)
+		}
+		return users, nil
+	}
+	return []int{}, nil
 }

@@ -91,3 +91,49 @@ func (r *UserRepo) Delete(ctx context.Context, id int) (int, error) {
 	return u_id, nil
 
 }
+
+func (r *UserRepo) GetRandomIDs(ctx context.Context, limit int) ([]int, error) {
+	sql := fmt.Sprintf("SELECT id FROM users ORDER BY random() LIMIT %d;", limit)
+
+	rows, err := r.Pool.Query(ctx, sql)
+	if err != nil {
+		return nil, fmt.Errorf("UserRepo.GetRandomIDs - r.Pool.Query: %v", err)
+	}
+	defer rows.Close()
+	var users []int
+	for rows.Next() {
+		var i int
+		err := rows.Scan(&i)
+		if err != nil {
+			return nil, fmt.Errorf("UserRepo.GetRandomIDs - rows.Scan: %v", err)
+		}
+		users = append(users, i)
+	}
+
+	if err = rows.Err(); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, repoerrs.ErrNotFound
+		}
+		return nil, fmt.Errorf("UserRepo.GetRandomIDs - rows.Err: %v", err)
+	}
+
+	return users, nil
+}
+
+func (r *UserRepo) GetCount(ctx context.Context) (int, error) {
+	sql := "SELECT * FROM users"
+
+	rows, err := r.Pool.Query(ctx, sql)
+	if err != nil {
+		return 0, fmt.Errorf("UserRepo.GetCount - r.Pool.Query: %v", err)
+	}
+	defer rows.Close()
+	var count int
+	for rows.Next() {
+		count++
+	}
+	if err != nil {
+		return 0, fmt.Errorf("UserRepo.GetCount - rows.Scan: %v", err)
+	}
+	return count, nil
+}

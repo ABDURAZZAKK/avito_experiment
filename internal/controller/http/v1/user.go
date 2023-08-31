@@ -134,7 +134,7 @@ type changeUserSegmentsInput struct {
 	Id         int      `json:"id"`
 	AddList    []string `json:"add_list"`
 	RemoveList []string `json:"remove_list"`
-	DeleteAt   *string  `json:"delete_at,omitempty"`
+	DeleteAt   string   `json:"delete_at,omitempty"`
 }
 
 func (r *userRoutes) addSegments(c echo.Context) error {
@@ -162,7 +162,7 @@ func (r *userRoutes) addSegments(c echo.Context) error {
 		newErrorResponse(c, http.StatusInternalServerError, "internal server error")
 		return err
 	}
-	if input.DeleteAt != nil && *input.DeleteAt != "" {
+	if input.DeleteAt != "" {
 		msg, err := broker.MsgSerialize(broker.Message{
 			"task":     "DeleteSegmentFromUserOnTime",
 			"time":     input.DeleteAt,

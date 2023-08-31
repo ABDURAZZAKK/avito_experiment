@@ -29,7 +29,7 @@ func NewRouter(handler *echo.Echo, services *service.Services, rabbit *broker.Ra
 	v1 := handler.Group("/api/v1")
 	{
 		newUserRoutes(v1.Group("/users"), services.User, rabbit)
-		newSegmentRoutes(v1.Group("/segments"), services.Segment, rabbit)
+		newSegmentRoutes(v1.Group("/segments"), services.Segment, services.User, rabbit)
 		newFileRoutes(v1.Group("/stats"), rabbit)
 	}
 }

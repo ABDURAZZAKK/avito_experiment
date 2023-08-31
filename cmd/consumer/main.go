@@ -62,6 +62,15 @@ func callAt(callTime string, f func()) {
 }
 
 func DeleteSegmentFromUserOnTime(pg *postgres.Postgres, msg map[string]interface{}) {
+	var users []int
+	if msg["users"] != nil {
+		for _, i := range msg["users"].([]interface{}) {
+			users = append(users, int(i.(float64)))
+		}
+	} else {
+		users = []int{int(msg["user"].(float64))}
+	}
+
 	usersSegmentsRepo := pgdb.NewUsersSegmentsRepo(pg)
 	m := msg["segments"].([]interface{})
 	segments := make([]string, 0, len(m))
@@ -69,7 +78,7 @@ func DeleteSegmentFromUserOnTime(pg *postgres.Postgres, msg map[string]interface
 		segments = append(segments, v.(string))
 	}
 	err := usersSegmentsRepo.DeleteSegmentFromUser(context.Background(),
-		int(msg["user"].(float64)),
+		users,
 		segments,
 	)
 	if err != nil {

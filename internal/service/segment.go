@@ -12,12 +12,14 @@ import (
 type SegmentService struct {
 	segmentRepo       repo.Segment
 	usersSegmentsRepo repo.UsersSegments
+	userRepo          repo.User
 }
 
-func NewSegmentService(segmentRepo repo.Segment, usersSegmentsRepo repo.UsersSegments) *SegmentService {
+func NewSegmentService(segmentRepo repo.Segment, usersSegmentsRepo repo.UsersSegments, userRepo repo.User) *SegmentService {
 	return &SegmentService{
 		segmentRepo:       segmentRepo,
 		usersSegmentsRepo: usersSegmentsRepo,
+		userRepo:          userRepo,
 	}
 }
 
@@ -32,17 +34,24 @@ func (s *SegmentService) GetBySlug(ctx context.Context, slug string) (entity.Seg
 	return segment, nil
 }
 
-func (s *SegmentService) Create(ctx context.Context, slug string) (string, error) {
+func (s *SegmentService) Create(ctx context.Context, slug string, users []int) (string, error) {
 	slug, err := s.segmentRepo.Create(ctx, slug)
 	if err != nil {
 		if err == repoerrs.ErrAlreadyExists {
-			return "", ErrUserAlreadyExists
+			return "", ErrAlreadyExists
 		}
 		return "", fmt.Errorf("SegmentService.Create - segmentRepo.Create: %v", err)
 	}
+	if len(users) > 0 {
+		err = s.usersSegmentsRepo.AddAndRemoveSegmentsUser(ctx, users, []string{slug}, []string{})
+		if err != nil {
+			return "", fmt.Errorf("SegmentService.Create - usersSegmentsRepo.AddAndRemoveSegmentsUser: %v", err)
+		}
+	}
+
 	return slug, nil
 }
-func (s *SegmentService) CreateAll(ctx context.Context, slugs []string) error {
+func (s *SegmentService) CreateAll(ctx context.Context, slugs []string, users []int) error {
 	err := s.segmentRepo.CreateAll(ctx, slugs)
 	if err != nil {
 		if err == repoerrs.ErrAlreadyExists {
@@ -50,6 +59,13 @@ func (s *SegmentService) CreateAll(ctx context.Context, slugs []string) error {
 		}
 		return fmt.Errorf("SegmentService.CreateAll - segmentRepo.CreateAll: %v", err)
 	}
+	if len(users) > 0 {
+		err = s.usersSegmentsRepo.AddAndRemoveSegmentsUser(ctx, users, slugs, []string{})
+		if err != nil {
+			return fmt.Errorf("SegmentService.CreateAll - usersSegmentsRepo.AddAndRemoveSegmentsUser: %v", err)
+		}
+	}
+
 	return nil
 }
 

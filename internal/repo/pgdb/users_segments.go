@@ -31,16 +31,31 @@ func (r *UsersSegmentsRepo) GetTransaction(ctx context.Context) (pgx.Tx, error) 
 	return tx, nil
 }
 
-func (r *UsersSegmentsRepo) getInsertSqlAddSegmentsToUser(user_pk int, list []string, operation entity.Operation) (string, []interface{}, error) {
+func (r *UsersSegmentsRepo) getInsertSqlAddSegmentsToUser(users []int, segments []string, operation entity.Operation) (string, []interface{}, error) {
 	builder := r.Builder.
 		Insert("users_segments_stats").
 		Columns("user_pk", "segment_pk", "created_at", "operation")
-	for _, segment := range list {
-		builder = builder.
-			Values(user_pk, segment, time.Now(), operation)
+	for _, user := range users {
+		for _, segment := range segments {
+			builder = builder.
+				Values(user, segment, time.Now(), operation)
+		}
 	}
 	return builder.ToSql()
 }
+func (r *UsersSegmentsRepo) getDeleteUsersSegmentsSql(users []int, segments []string) (string, []interface{}, error) {
+	some := squirrel.Or{}
+	for _, user := range users {
+		for _, slug := range segments {
+			some = append(some, squirrel.Eq{"user_pk": user, "segment_pk": slug})
+		}
+	}
+	return r.Builder.
+		Delete("users_segments").
+		Where(some).
+		ToSql()
+}
+
 func getMonthStartEndDates(month int) (start string, end string) {
 	_month := time.Month(month)
 	start = time.Date(2023, _month, 1, 0, 0, 0, 0, time.Local).Format("2006-01-02")
@@ -50,7 +65,7 @@ func getMonthStartEndDates(month int) (start string, end string) {
 
 func (r *UsersSegmentsRepo) AddAndRemoveSegmentsUser(
 	ctx context.Context,
-	user_pk int,
+	users []int,
 	addList []string,
 	removeList []string) error {
 	tx, err := r.Pool.Begin(ctx)
@@ -60,16 +75,18 @@ func (r *UsersSegmentsRepo) AddAndRemoveSegmentsUser(
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	if len(addList) != 0 {
-		sql, args, _ := r.getInsertSqlAddSegmentsToUser(user_pk, addList, entity.SEGMENT_ADDED)
+		sql, args, _ := r.getInsertSqlAddSegmentsToUser(users, addList, entity.SEGMENT_ADDED)
 		if _, err = tx.Exec(ctx, sql, args...); err != nil {
 			return fmt.Errorf("UsersSegmentsRepo.AddAndRemoveSegmentsUser (add to stats) - tx.Exec: %v", err)
 		}
 		builder := r.Builder.
 			Insert("users_segments").
 			Columns("user_pk", "segment_pk")
-		for _, segment := range addList {
-			builder = builder.
-				Values(user_pk, segment)
+		for _, user := range users {
+			for _, segment := range addList {
+				builder = builder.
+					Values(user, segment)
+			}
 		}
 		sql, args, _ = builder.ToSql()
 		if _, err = tx.Exec(ctx, sql, args...); err != nil {
@@ -87,19 +104,12 @@ func (r *UsersSegmentsRepo) AddAndRemoveSegmentsUser(
 
 	}
 	if len(removeList) != 0 {
-		sql, args, _ := r.getInsertSqlAddSegmentsToUser(user_pk, removeList, entity.SEGMENT_REMOVED)
+		sql, args, _ := r.getInsertSqlAddSegmentsToUser(users, removeList, entity.SEGMENT_REMOVED)
 		if _, err = tx.Exec(ctx, sql, args...); err != nil {
 			return fmt.Errorf("UsersSegmentsRepo.AddAndRemoveSegmentsUser (remove to stats) - tx.Exec: %v", err)
 		}
 
-		some := squirrel.Or{}
-		for _, slug := range removeList {
-			some = append(some, squirrel.Eq{"user_pk": user_pk, "segment_pk": slug})
-		}
-		sql, args, _ = r.Builder.
-			Delete("users_segments").
-			Where(some).
-			ToSql()
+		sql, args, _ = r.getDeleteUsersSegmentsSql(users, removeList)
 
 		if _, err = tx.Exec(ctx, sql, args...); err != nil {
 			return fmt.Errorf("UsersSegmentsRepo.AddAndRemoveSegmentsUser (remove) - tx.Exec: %v", err)
@@ -184,27 +194,20 @@ func (r *UsersSegmentsRepo) GetStatsPerPeriod(ctx context.Context, year int, mon
 	return segments, nil
 
 }
-func (r *UsersSegmentsRepo) DeleteSegmentFromUser(ctx context.Context, user_pk int, segments []string) error {
+func (r *UsersSegmentsRepo) DeleteSegmentFromUser(ctx context.Context, users []int, segments []string) error {
 	tx, err := r.Pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("UsersSegmentsRepo.DeleteSegmentFromUser - r.Pool.Begin: %v", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if len(segments) != 0 {
-		sql, args, _ := r.getInsertSqlAddSegmentsToUser(user_pk, segments, entity.SEGMENT_REMOVED)
+	if len(users) != 0 && len(segments) != 0 {
+		sql, args, _ := r.getInsertSqlAddSegmentsToUser(users, segments, entity.SEGMENT_REMOVED)
 		if _, err = tx.Exec(ctx, sql, args...); err != nil {
 			return fmt.Errorf("UsersSegmentsRepo.DeleteSegmentFromUser (remove to stats) - tx.Exec: %v", err)
 		}
 
-		some := squirrel.Or{}
-		for _, slug := range segments {
-			some = append(some, squirrel.Eq{"user_pk": user_pk, "segment_pk": slug})
-		}
-		sql, args, _ = r.Builder.
-			Delete("users_segments").
-			Where(some).
-			ToSql()
+		sql, args, _ = r.getDeleteUsersSegmentsSql(users, segments)
 
 		if _, err = tx.Exec(ctx, sql, args...); err != nil {
 			return fmt.Errorf("UsersSegmentsRepo.DeleteSegmentFromUser (remove) - tx.Exec: %v", err)
