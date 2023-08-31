@@ -13,7 +13,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n    \"slug\":\"u1\"\r\n}",
+					"raw": "// Все необязательные поля закоментированны \r\n{\r\n    \"slug\":\"u1\"\r\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -44,7 +44,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n    \"slug\":\"s1\"\r\n}",
+					"raw": "{\r\n    \"slug\":\"s1\"\r\n    // \"percentage_of_users\": 2, //2%\r\n    // \"delete_at\": \"2023-08-31 14:58:10\"\r\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -75,7 +75,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n    \"slugs\": [\"s1\",\"s2\",\"s3\",\"s4\",\"s5\"]\r\n}",
+					"raw": "{\r\n    \"slugs\": [\"s2\",\"s3\",\"s4\",\"s5\"]\r\n    //\"percentage_of_users\": 2, //2%\r\n    //\"delete_at\": \"2023-08-31 01:47:10\"\r\n\r\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -106,7 +106,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n    \"id\": 1,\r\n    \"add_list\": [\"s1\", \"s2\",\"s3\",\"s4\",\"s5\"],\r\n    \"remove_list\": [\"s1\"]\r\n    // \"delete_at\": \"2023-08-29 19:57:10\"\r\n}",
+					"raw": "{\r\n    \"id\": 1,\r\n    \"add_list\": [\"s1\", \"s2\",\"s3\",\"s4\",\"s5\"],\r\n    \"remove_list\": [\"s1\", \"s2\"]\r\n    // \"delete_at\": \"2023-08-31 15:00:10\"\r\n}",
 					"options": {
 						"raw": {
 							"language": "json"
